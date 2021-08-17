@@ -116,18 +116,18 @@ bool CheckSumCheck(const std::string& sentence)
     size_t check_start = sentence.find('*');
     if(check_start == wxString::npos || check_start > sentence.size() - 3)
         return false; // * not found, or it didn't have 2 characters following it.
-        
+
     std::string check_str = sentence.substr(check_start+1,2);
     unsigned long checksum = strtol(check_str.c_str(), 0, 16);
     if(checksum == 0L && check_str != "00")
         return false;
-    
+
     unsigned char calculated_checksum = 0;
     for(std::string::const_iterator i = sentence.begin()+1; i != sentence.end() && *i != '*'; ++i)
         calculated_checksum ^= static_cast<unsigned char> (*i);
-    
+
     return calculated_checksum == checksum;
-    
+
 }
 
 
@@ -162,7 +162,7 @@ DataStream* makeDataStream(wxEvtHandler *input_consumer, const ConnectionParams*
 
 // constructor
 DataStream::DataStream(wxEvtHandler *input_consumer,
-             const ConnectionType conn_type,         
+             const ConnectionType conn_type,
              const wxString& Port,
              const wxString& BaudRate,
              dsPortType io_select,
@@ -210,7 +210,7 @@ DataStream::DataStream(wxEvtHandler *input_consumer,
 {
     m_BaudRate = wxString::Format(wxT("%i"), params->Baudrate),
     SetSecThreadInActive();
-    
+
     wxLogMessage( _T("ConnectionParams CTOR"));
 
     // Open();
@@ -243,7 +243,7 @@ bool InternalBTDataStream::SendSentence( const wxString &sentence )
     wxString payload = sentence;
     if( !sentence.EndsWith(_T("\r\n")) )
         payload += _T("\r\n");
-    
+
     if(IsOk()){
         androidSendBTMessage( payload );
         return IsOk();
@@ -262,7 +262,7 @@ void InternalGPSDataStream::Open(void)
 #endif
 
 }
- 
+
 
 
 DataStream::~DataStream()
@@ -273,7 +273,7 @@ DataStream::~DataStream()
 void DataStream::Close()
 {
     wxLogMessage( wxString::Format(_T("Closing NMEA Datastream %s"), m_portstring.c_str()) );
-    
+
 //    Kill off the Secondary RX Thread if alive
     if(m_pSecondary_Thread)
     {
@@ -303,7 +303,7 @@ void DataStream::Close()
         m_GarminHandler->Close();
         delete m_GarminHandler;
     }
-    
+
 
     if(m_connection_type == INTERNAL_GPS){
 #ifdef __OCPN__ANDROID__
@@ -315,18 +315,18 @@ void DataStream::Close()
         androidStopBT();
 #endif
     }
-    
+
     wxString port =  m_portstring.AfterFirst(':');      // strip "Serial:"
-    
+
 #ifdef __OCPN__ANDROID__
     if(port.Contains(_T("AUSBSerial"))){
         androidStopUSBSerial(port);
         SetOk(false);
     }
-#endif        
+#endif
 
-    
-        
+
+
 }
 
 #if 0 // moved to NetworkDataStream
@@ -439,7 +439,7 @@ void DataStream::OnSocketEvent(wxSocketEvent& event)
                             if(nmea_line.size()) {
                                 Nevent.SetNMEAString( nmea_line );
                                 Nevent.SetStream( this );
-                            
+
                                 m_consumer->AddPendingEvent(Nevent);
                             }
                         }
@@ -461,8 +461,8 @@ void DataStream::OnSocketEvent(wxSocketEvent& event)
         {
             //          wxSocketError e = m_sock->LastError();          // this produces wxSOCKET_WOULDBLOCK.
             if(m_net_protocol == TCP || m_net_protocol == GPSD) {
-				if (m_brx_connect_event)
-					wxLogMessage(wxString::Format(_T("Datastream connection lost: %s"), m_portstring.c_str()));
+                if (m_brx_connect_event)
+                    wxLogMessage(wxString::Format(_T("Datastream connection lost: %s"), m_portstring.c_str()));
                 if (m_socket_server) {
                     m_sock->Destroy();
                     m_sock=0;
@@ -475,10 +475,10 @@ void DataStream::OnSocketEvent(wxSocketEvent& event)
 
                 //  If the socket has never connected, and it is a short interval since the connect request
                 //  then stretch the time a bit.  This happens on Windows if there is no dafault IP on any interface
-                
+
                 if(!m_brx_connect_event && (since_connect.GetSeconds() < 5) )
                     retry_time = 10000;         // 10 secs
-                
+
                 m_socketread_watchdog_timer.Stop();
                 m_socket_timer.Start(retry_time, wxTIMER_ONE_SHOT);     // Schedule a re-connect attempt
 
@@ -519,13 +519,13 @@ void DataStream::OnSocketEvent(wxSocketEvent& event)
 
 void DataStream::OnServerSocketEvent(wxSocketEvent& event)
 {
-    
+
     switch(event.GetSocketEvent())
     {
         case wxSOCKET_CONNECTION :
         {
             m_sock= m_socket_server->Accept(false);
- 
+
             if( m_sock) {
                 m_sock->SetTimeout(2);
                 m_sock->SetFlags( wxSOCKET_BLOCK );
@@ -540,10 +540,10 @@ void DataStream::OnServerSocketEvent(wxSocketEvent& event)
                 m_sock->SetNotify(notify_flags);
                 m_sock->Notify(true);
             }
-            
+
             break;
         }
-        
+
         default :
             break;
     }
@@ -612,7 +612,7 @@ bool DataStream::ChecksumOK( const std::string &sentence )
         return true;
 
     return CheckSumCheck(sentence);
-    
+
 }
 
 
