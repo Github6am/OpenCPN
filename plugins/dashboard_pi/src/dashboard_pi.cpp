@@ -43,6 +43,8 @@
 #include "wx/jsonreader.h"
 #include "wx/jsonwriter.h"
 
+#include <wx/ffile.h>
+
 wxFont *g_pFontTitle;
 wxFont *g_pFontData;
 wxFont *g_pFontLabel;
@@ -165,6 +167,7 @@ enum {
     ID_DBP_D_MON, ID_DBP_I_ATMP, ID_DBP_I_AWA, ID_DBP_I_TWA, ID_DBP_I_TWD, ID_DBP_I_TWS,
     ID_DBP_D_TWD, ID_DBP_I_HDM, ID_DBP_D_HDT, ID_DBP_D_WDH, ID_DBP_I_VLW1, ID_DBP_I_VLW2, ID_DBP_D_MDA, ID_DBP_I_MDA,ID_DBP_D_BPH, ID_DBP_I_FOS,
     ID_DBP_M_COG, ID_DBP_I_PITCH, ID_DBP_I_HEEL, ID_DBP_D_AWA_TWA, ID_DBP_I_GPSLCL, ID_DBP_I_CPULCL, ID_DBP_I_SUNLCL,
+    ID_DBP_I_ALTI, ID_DBP_D_ALTI,
     ID_DBP_LAST_ENTRY //this has a reference in one of the routines; defining a "LAST_ENTRY" and setting the reference to it, is one codeline less to change (and find) when adding new instruments :-)
 };
 
@@ -209,6 +212,10 @@ wxString getInstrumentCaption( unsigned int id )
             return _("App. Wind Speed");
         case ID_DBP_D_TW:
             return _("True Wind Angle & Speed");
+        case ID_DBP_I_ALTI:
+            return _("Altitude");
+        case ID_DBP_D_ALTI:
+            return _("Altitude");
         case ID_DBP_I_DPT:
             return _("Depth");
         case ID_DBP_D_DPT:
@@ -310,6 +317,7 @@ void getListItemForInstrument( wxListItem &item, unsigned int id )
         case ID_DBP_I_FOS:
         case ID_DBP_I_PITCH:
         case ID_DBP_I_HEEL:
+        case ID_DBP_I_ALTI:
             item.SetImage( 0 );
             break;
         case ID_DBP_D_SOG:
@@ -329,6 +337,7 @@ void getListItemForInstrument( wxListItem &item, unsigned int id )
         case ID_DBP_D_MON:
         case ID_DBP_D_WDH:
         case ID_DBP_D_BPH:
+        case ID_DBP_D_ALTI:
             item.SetImage( 1 );
             break;
     }
@@ -779,9 +788,17 @@ void dashboard_pi::SendSatInfoToAllInstruments( int cnt, int seq, wxString talk,
 void dashboard_pi::SetNMEASentence( wxString &sentence )
 {
     m_NMEA0183 << sentence;
-
+    FILE * logfilep;
+    logfilep=fopen("/tmp/SetNMEASentence.log", "a");
+    // wxFFile nmealog( "/tmp/nmea.log","w" );
+    // if(nmealog.IsOpened()) {
+    //   nmealog.Write("hallo\n");
+    //   nmealog.Flush();
+    //   //wxFSFile * log = OpenFile ("/tmp/nmea.log", wxFS_APPEND);
+    // }
     if( m_NMEA0183.PreParse() ) {
         if( m_NMEA0183.LastSentenceIDReceived == _T("DBT") ) {
+            if(logfilep!=NULL) fprintf(logfilep, "DBT mPriDepth=%d\n",mPriDepth);
             if( mPriDepth >= 4 ) {
                 if( m_NMEA0183.Parse() ) {
 
@@ -835,6 +852,16 @@ void dashboard_pi::SetNMEASentence( wxString &sentence )
         }
 // TODO: GBS - GPS Satellite fault detection
         else if( m_NMEA0183.LastSentenceIDReceived == _T("GGA") ) {
+            if(logfilep!=NULL) fprintf(logfilep, "GGA mPriPosition=%d mPriSatUsed=%d \tnSat=%d alt=%3.2f\n",mPriPosition, mPriSatUsed, m_NMEA0183.Gga.NumberOfSatellitesInUse, m_NMEA0183.Gga.AntennaAltitudeMeters);
+            if(mPriPosition >= 1 || mPriSatUsed >= 1) {
+                if (m_NMEA0183.Parse()) {
+                    if (m_NMEA0183.Gga.GPSQuality > 0 && m_NMEA0183.Gga.NumberOfSatellitesInUse >= 5) {
+                        // Altimeter, takes altitude from gps GGA message, which is typically less accurate than lon and lat.
+                        double alt = m_NMEA0183.Gga.AntennaAltitudeMeters;
+                        SendSentenceToAllInstruments(OCPN_DBP_STC_ALTI, alt, _T("m"));
+                    }
+                }
+            }
             if (mPriPosition >= 4 || mPriSatUsed >= 3) {
                 if (m_NMEA0183.Parse()) {
                     if (m_NMEA0183.Gga.GPSQuality > 0) {
@@ -1525,6 +1552,7 @@ void dashboard_pi::SetNMEASentence( wxString &sentence )
             }
         }
     }
+    if(logfilep!=NULL) fclose(logfilep);
 }
 
 /*      Calculate True Wind speed and direction from AWS and AWA
@@ -2034,6 +2062,7 @@ void dashboard_pi::updateSKItem(wxJSONValue &item, wxString &sfixtime) {
 
 void dashboard_pi::SetPositionFix( PlugIn_Position_Fix &pfix )
 {
+    printf("SetPositionFix mPriPosition=%d\n", mPriPosition);
     if( mPriPosition >= 1 ) {
         mPriPosition = 1;
         SendSentenceToAllInstruments( OCPN_DBP_STC_LAT, pfix.Lat, _T("SDMM") );
@@ -3941,6 +3970,14 @@ void DashboardWindow::SetInstrumentList( wxArrayInt list )
                         DIAL_POSITION_BOTTOMLEFT );
                 ( (DashboardInstrument_Dial *) instrument )->SetOptionExtraValue(
                         OCPN_DBP_STC_TWS2, _T("%.1f"), DIAL_POSITION_INSIDE );
+                break;
+            case ID_DBP_I_ALTI:
+                instrument = new DashboardInstrument_Single( this, wxID_ANY,
+                        getInstrumentCaption( id ), OCPN_DBP_STC_ALTI, _T("%6.1f") );
+                break;
+            case ID_DBP_D_ALTI:
+                instrument = new DashboardInstrument_Depth( this, wxID_ANY,
+                        getInstrumentCaption( id ) );
                 break;
             case ID_DBP_I_DPT:
                 instrument = new DashboardInstrument_Single( this, wxID_ANY,
