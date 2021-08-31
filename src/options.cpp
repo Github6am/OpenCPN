@@ -54,6 +54,7 @@
 #include "wx/dir.h"
 #include "wx/odcombo.h"
 #include <wx/statline.h>
+#include <wx/regex.h>
 #include "SignalKDataStream.h"
 
 #if wxCHECK_VERSION(2, 9, \
@@ -264,6 +265,7 @@ extern wxColour g_colourTrackLineColour;
 extern int g_iSDMMFormat;
 extern int g_iDistanceFormat;
 extern int g_iSpeedFormat;
+extern int g_iTempFormat;
 
 extern bool g_bAdvanceRouteWaypointOnArrivalOnly;
 
@@ -5287,6 +5289,20 @@ void options::CreatePanel_Units(size_t parent, int border_size,
     #endif
     unitsSizer->Add(pDepthUnitSelect, inputFlags);
 
+    // temperature units
+    unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _("Temperature")),
+                    labelFlags);
+    wxString pTempUnitStrings[] = {
+        _("Celsius"), _("Fahrenheit"), _("Kelvin"),
+    };
+    pTempFormat =
+        new wxChoice(panelUnits, ID_TEMPUNITSCHOICE, wxDefaultPosition,
+                     wxSize(m_fontHeight * 4, -1), 3, pTempUnitStrings);
+    #ifdef __OCPN__ANDROID__
+        setChoiceStyleSheet( pTempFormat, m_fontHeight *8/10);
+    #endif
+    unitsSizer->Add(pTempFormat, inputFlags);
+
     // spacer
     unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _T("")));
     unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _T("")));
@@ -5396,6 +5412,17 @@ void options::CreatePanel_Units(size_t parent, int border_size,
         new wxChoice(panelUnits, ID_DEPTHUNITSCHOICE, wxDefaultPosition,
                      wxDefaultSize, 3, pDepthUnitStrings);
     unitsSizer->Add(pDepthUnitSelect, inputFlags);
+
+    // temperature units
+    unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _("Temperature")),
+                    labelFlags);
+    wxString pTempUnitStrings[] = {
+        _("Celsius"), _("Fahrenheit"), _("Kelvin"),
+    };
+    pTempFormat =
+        new wxChoice(panelUnits, ID_TEMPUNITSCHOICE, wxDefaultPosition,
+                     wxDefaultSize, 3, pTempUnitStrings);
+    unitsSizer->Add(pTempFormat, inputFlags);
 
     // spacer
     unitsSizer->Add(new wxStaticText(panelUnits, wxID_ANY, _T("")));
@@ -7021,6 +7048,7 @@ void options::SetInitialSettings(void) {
   pSDMMFormat->Select(g_iSDMMFormat);
   pDistanceFormat->Select(g_iDistanceFormat);
   pSpeedFormat->Select(g_iSpeedFormat);
+  pTempFormat->Select(g_iTempFormat);
 
   pAdvanceRouteWaypointOnArrivalOnly->SetValue(
       g_bAdvanceRouteWaypointOnArrivalOnly);
@@ -8156,8 +8184,10 @@ void options::OnApplyClick(wxCommandEvent& event) {
   g_bShowMag = pCBMagShow->GetValue();
 
   b_haveWMM = g_pi_manager && g_pi_manager->IsPlugInAvailable(_T("WMM"));
-  if(!b_haveWMM  && !b_oldhaveWMM)
+  if(!b_haveWMM  && !b_oldhaveWMM){
     pMagVar->GetValue().ToDouble(&g_UserVar);
+    gVar = g_UserVar;
+  }
 
   m_pText_OSCOG_Predictor->GetValue().ToDouble(&g_ownship_predictor_minutes);
   m_pText_OSHDT_Predictor->GetValue().ToDouble(&g_ownship_HDTpredictor_miles);
@@ -8198,6 +8228,7 @@ void options::OnApplyClick(wxCommandEvent& event) {
   g_iSDMMFormat = pSDMMFormat->GetSelection();
   g_iDistanceFormat = pDistanceFormat->GetSelection();
   g_iSpeedFormat = pSpeedFormat->GetSelection();
+  g_iTempFormat = pTempFormat->GetSelection();
 
   // LIVE ETA OPTION
   if(pSLiveETA) g_bShowLiveETA = pSLiveETA->GetValue();
@@ -10995,13 +11026,13 @@ void SentenceListDlg::OnCLBSelect(wxCommandEvent& e) {
 
 void SentenceListDlg::OnAddClick(wxCommandEvent& event) {
   wxTextEntryDialog textdlg(
-      this, _("Enter the NMEA sentence (2, 3 or 5 characters) "),
+      this, _("Enter the NMEA sentence (2, 3 or 5 characters)\n  or a valid REGEX expression (6 characters or longer)"),
       _("Enter the NMEA sentence"));
 #if wxCHECK_VERSION(2, 9, 0)
-  textdlg.SetMaxLength(5);
+//  textdlg.SetMaxLength(5);
 #endif
 
-  textdlg.SetTextValidator(wxFILTER_ALPHANUMERIC);
+  textdlg.SetTextValidator(wxFILTER_ASCII);
   if (textdlg.ShowModal() == wxID_CANCEL) return;
   wxString stc = textdlg.GetValue();
 
@@ -11010,19 +11041,38 @@ void SentenceListDlg::OnAddClick(wxCommandEvent& event) {
     m_clbSentences->Check(m_clbSentences->FindString(stc));
     return;
   }
-
-  OCPNMessageBox(
+  else if (stc.Length() < 2){
+      OCPNMessageBox(
       this,
       _("An NMEA sentence is generally 3 characters long (like RMC, GGA etc.)\n \
           It can also have a two letter prefix identifying the source, or TALKER, of the message.\n \
           The whole sentences then looks like GPGGA or AITXT.\n \
-          You may filter out all the sentences with certain TALKER prefix (like GP, AI etc.).\n\n \
-          The filter accepts just these three formats."),
+          You may filter out all the sentences with certain TALKER prefix (like GP, AI etc.).\n \
+          The filter also accepts Regular Expressions (REGEX) with 6 or more characters. \n\n"),
       _("OpenCPN Info"));
+      return;
+  }
+
+  else {
+    // Verify that a longer text entry is a valid RegEx
+    wxRegEx r(stc);
+    if( r.IsValid() ){
+      m_clbSentences->Append(stc);
+      m_clbSentences->Check(m_clbSentences->FindString(stc));
+      return;
+    }
+    else{
+      OCPNMessageBox(
+          this,
+          _("REGEX syntax error: \n") + stc,
+            _("OpenCPN Info"));
+      return;
+    }
+  }
 }
 
 void SentenceListDlg::OnDeleteClick(wxCommandEvent& event) {
-  m_clbSentences->Delete(event.GetSelection());
+  m_clbSentences->Delete(m_clbSentences->GetSelection());
 }
 
 void SentenceListDlg::OnClearAllClick(wxCommandEvent& event) {
