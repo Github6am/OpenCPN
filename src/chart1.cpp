@@ -186,10 +186,6 @@
 #include "crashprint.h"
 #endif
 
-#ifdef __WXOSX__
-#include "DarkMode.h"
-#endif
-
 #ifdef OCPN_USE_NEWSERIAL
 #include "serial/serial.h"
 #endif
@@ -1887,14 +1883,12 @@ bool MyApp::OnInit() {
   OCPN_OSDetail *detail = g_Platform->GetOSDetail();
   wxString msgplat;
   wxString like0;
-  if(!detail->osd_names_like.empty())
+  if (!detail->osd_names_like.empty())
     like0 = detail->osd_names_like[0].c_str();
-  msgplat.Printf( "OCPN_OSDetail:  %s ; %s ; %s ; %s ; %s",
-              detail->osd_arch.c_str(),
-              detail->osd_name.c_str(),
-              detail->osd_version.c_str(),
-              detail->osd_ID.c_str(),
-              like0.mb_str() );
+  msgplat.Printf("OCPN_OSDetail:  %s ; %s ; %s ; %s ; %s",
+                 detail->osd_arch.c_str(), detail->osd_name.c_str(),
+                 detail->osd_version.c_str(), detail->osd_ID.c_str(),
+                 like0.mb_str());
   wxLogMessage(msgplat);
 
   //    Initialize embedded PNG icon graphics
@@ -2022,8 +2016,7 @@ bool MyApp::OnInit() {
 
   if (g_useMUI) {
     ocpnStyle::Style *style = g_StyleManager->GetCurrentStyle();
-    if (style)
-      style->chartStatusWindowTransparent = true;
+    if (style) style->chartStatusWindowTransparent = true;
   }
 
   //      Init the WayPoint Manager
@@ -2772,10 +2765,12 @@ void MyApp::TrackOff(void) {
 wxDEFINE_EVENT(BELLS_PLAYED_EVTYPE, wxCommandEvent);
 
 BEGIN_EVENT_TABLE(MyFrame, wxFrame)
-EVT_CLOSE(MyFrame::OnCloseWindow) EVT_MENU(wxID_EXIT, MyFrame::OnExit) EVT_SIZE(
-    MyFrame::OnSize) EVT_MOVE(MyFrame::OnMove) EVT_ICONIZE(MyFrame::OnIconize)
-    EVT_MENU(-1, MyFrame::OnToolLeftClick) EVT_TIMER(INIT_TIMER,
-                                                     MyFrame::OnInitTimer)
+EVT_CLOSE(MyFrame::OnCloseWindow)
+EVT_MENU(wxID_EXIT, MyFrame::OnExit)
+EVT_SIZE(MyFrame::OnSize)
+EVT_MOVE(MyFrame::OnMove)
+EVT_ICONIZE(MyFrame::OnIconize) EVT_MENU(-1, MyFrame::OnToolLeftClick)
+    EVT_TIMER(INIT_TIMER, MyFrame::OnInitTimer)
         EVT_TIMER(FRAME_TIMER_1, MyFrame::OnFrameTimer1)
             EVT_TIMER(FRAME_TC_TIMER, MyFrame::OnFrameTCTimer)
                 EVT_TIMER(FRAME_COG_TIMER, MyFrame::OnFrameCOGTimer)
@@ -3059,7 +3054,7 @@ void MyFrame::OnBellsFinished(wxCommandEvent &event) {
 
   OcpnSound *sound = bells_sound[bells - 1];
   sound->SetFinishedCallback(onBellsFinishedCB, this);
-  auto cmd_sound = dynamic_cast<SystemCmdSound*>(sound);
+  auto cmd_sound = dynamic_cast<SystemCmdSound *>(sound);
   if (cmd_sound) cmd_sound->SetCmd(g_CmdSoundString.mb_str(wxConvUTF8));
   sound->Load(soundfile);
   if (!sound->IsOk()) {
@@ -3108,17 +3103,6 @@ void MyFrame::SetAndApplyColorScheme(ColorScheme cs) {
       SchemeName = _T("DAY");
       break;
   }
-
-#if defined(__WXOSX__) && defined(OCPN_USE_DARKMODE)
-  bool darkMode = (cs == GLOBAL_COLOR_SCHEME_DUSK ||
-                   cs == GLOBAL_COLOR_SCHEME_NIGHT );
-
-  if (wxPlatformInfo::Get().CheckOSVersion(10, 14)) {
-    setAppLevelDarkMode(darkMode);
-  } else if (wxPlatformInfo::Get().CheckOSVersion(10, 12)) {
-    setWindowLevelDarkMode(MacGetTopLevelWindowRef(), darkMode);
-  }
-#endif
 
   g_pauidockart->SetMetric(wxAUI_DOCKART_GRADIENT_TYPE, wxAUI_GRADIENT_NONE);
 
@@ -5922,7 +5906,8 @@ int MyFrame::DoOptionsDialog() {
     pConfig->Read("OptionsSizeX", &sx, -1);
     pConfig->Read("OptionsSizeY", &sy, -1);
 
-    g_options = new options(this, -1, _("Options"), wxPoint(-1, -1), wxSize(sx, sy) );
+    g_options =
+        new options(this, -1, _("Options"), wxPoint(-1, -1), wxSize(sx, sy));
 
     g_Platform->HideBusySpinner();
   }
@@ -6049,6 +6034,14 @@ int MyFrame::DoOptionsDialog() {
   if (g_MainToolbar) g_MainToolbar->EnableTooltips();
 
   options_lastPage = g_options->lastPage;
+#ifdef __OCPN__ANDROID__
+  //  This is necessary to force a manual change to charts page,
+  //  in order to properly refresh the chart directory list.
+  //  Root cause:  In Android, trouble with clearing the wxScrolledWindow
+  if (options_lastPage == 1)
+    options_lastPage = 0;
+#endif
+
   options_subpage = g_options->lastSubPage;
 
   options_lastWindowPos = g_options->lastWindowPos;
@@ -6622,10 +6615,10 @@ bool MyFrame::UpdateChartDatabaseInplace(ArrayOfCDI &DirArray, bool b_force,
   ChartData->SaveBinary(ChartListFileName);
   wxLogMessage(_T("Finished chart database Update"));
   wxLogMessage(_T("   "));
-  if (gWorldMapLocation
-          .empty()) {  // Last resort. User might have deleted all GSHHG data,
-                       // but we still might have the default dataset distributed
-                       // with OpenCPN or from the package repository...
+  if (gWorldMapLocation.empty()) {  // Last resort. User might have deleted all
+                                    // GSHHG data, but we still might have the
+                                    // default dataset distributed with OpenCPN
+                                    // or from the package repository...
     gWorldMapLocation = gDefaultWorldMapLocation;
     gshhg_chart_loc = wxEmptyString;
   }
@@ -6959,7 +6952,8 @@ void MyFrame::OnInitTimer(wxTimerEvent &event) {
       pConfig->Read("OptionsSizeX", &sx, -1);
       pConfig->Read("OptionsSizeY", &sy, -1);
 
-      g_options = new options(this, -1, _("Options"), wxPoint(-1, -1), wxSize(sx, sy));
+      g_options =
+          new options(this, -1, _("Options"), wxPoint(-1, -1), wxSize(sx, sy));
 
       // needed to ensure that the chart window starts with keyboard focus
       SurfaceAllCanvasToolbars();
@@ -7302,7 +7296,13 @@ void MyFrame::OnFrameTimer1(wxTimerEvent &event) {
     GPSData.kHdt = gHdt;
     GPSData.nSats = g_SatsInView;
 
-    GPSData.FixTime = m_fixtime;
+    wxDateTime tCheck( (time_t) m_fixtime);
+
+    if (tCheck.IsValid())
+      GPSData.FixTime = m_fixtime;
+    else
+      GPSData.FixTime = wxDateTime::Now().GetTicks();
+
 
     g_pi_manager->SendPositionFixToAllPlugIns(&GPSData);
   }
@@ -8705,7 +8705,9 @@ void MyFrame::OnEvtOCPN_SignalK(OCPN_SignalKEvent &event) {
 
 void MyFrame::OnEvtOCPN_NMEA(OCPN_DataStreamEvent &event) {
   wxString sfixtime;
-  bool pos_valid = false, cog_sog_valid = false;
+  bool pos_valid = false;
+  bool cog_valid = false;
+  bool sog_valid = false;
   bool bis_recognized_sentence = true;
 
   wxString str_buf = event.ProcessNMEA4Tags();
@@ -8757,15 +8759,20 @@ void MyFrame::OnEvtOCPN_NMEA(OCPN_DataStreamEvent &event) {
           if (m_NMEA0183.Rmc.IsDataValid == NTrue) {
             pos_valid = ParsePosition(m_NMEA0183.Rmc.Position);
 
-            // course is not valid in this case
-            // but also my gps occasionally outputs RMC
-            // messages with valid lat and lon but
-            // 0.0 for speed and course which messes up the filter
-            if (!g_own_ship_sog_cog_calc &&
-                m_NMEA0183.Rmc.SpeedOverGroundKnots > 0) {
-              gSog = m_NMEA0183.Rmc.SpeedOverGroundKnots;
-              gCog = m_NMEA0183.Rmc.TrackMadeGoodDegreesTrue;
-              cog_sog_valid = true;
+
+            if (!g_own_ship_sog_cog_calc ){
+              if (!std::isnan(m_NMEA0183.Rmc.SpeedOverGroundKnots)){
+                gSog = m_NMEA0183.Rmc.SpeedOverGroundKnots;
+                sog_valid = true;
+              }
+              if(!std::isnan(gSog) && (gSog > 0)){
+                gCog = m_NMEA0183.Rmc.TrackMadeGoodDegreesTrue;
+                cog_valid = true;
+              }
+              else{
+                gCog = NAN;
+                cog_valid = true;
+              }
             }
 
             // Any device sending VAR=0.0 can be assumed to not really know
@@ -8890,9 +8897,7 @@ void MyFrame::OnEvtOCPN_NMEA(OCPN_DataStreamEvent &event) {
           if (!g_own_ship_sog_cog_calc && !wxIsNaN(m_NMEA0183.Vtg.SpeedKnots) &&
               !wxIsNaN(m_NMEA0183.Vtg.TrackDegreesTrue)) {
             setCourseOverGround(m_NMEA0183.Vtg.TrackDegreesTrue);
->>>>>>> 1f7f17e0a7cd430bc7d73457a91958a3d01eecfa
 #endif
-            cog_sog_valid = true;
           }
           break;
 
@@ -8950,7 +8955,8 @@ void MyFrame::OnEvtOCPN_NMEA(OCPN_DataStreamEvent &event) {
       } else {
         UpdatePositionCalculatedSogCog();
       }
-      cog_sog_valid = true;
+      cog_valid = true;
+      sog_valid = true;
 
       if (!std::isnan(gpd.kHdt)) {
         gHdt = gpd.kHdt;
@@ -8983,15 +8989,18 @@ void MyFrame::OnEvtOCPN_NMEA(OCPN_DataStreamEvent &event) {
     }
   }
 
-  if (g_own_ship_sog_cog_calc) cog_sog_valid = true;
+  if (g_own_ship_sog_cog_calc){
+    sog_valid = true;
+    cog_valid = true;
+  }
 
   if (bis_recognized_sentence)
-    PostProcessNMEA(pos_valid, cog_sog_valid, sfixtime);
+    PostProcessNMEA(pos_valid, sog_valid, cog_valid, sfixtime);
 }
 
-void MyFrame::PostProcessNMEA(bool pos_valid, bool cog_sog_valid,
-                              const wxString &sfixtime) {
-  if (cog_sog_valid) {
+void MyFrame::PostProcessNMEA(bool pos_valid, bool sog_valid,
+                              bool cog_valid, const wxString &sfixtime) {
+  if (cog_valid) {
     //    Maintain average COG for Course Up Mode
     if (!std::isnan(gCog)) {
       if (g_COGAvgSec > 0) {
@@ -9092,29 +9101,28 @@ void MyFrame::PostProcessNMEA(bool pos_valid, bool cog_sog_valid,
       if (STAT_FIELD_TICK >= 0) SetStatusText(s1, STAT_FIELD_TICK);
     }
 
-    if (cog_sog_valid) {
-      wxString sogcog;
-      if (std::isnan(gSog))
-        sogcog.Printf(_T("SOG --- ") + getUsrSpeedUnit() + _T("     "));
-      else
-        sogcog.Printf(_T("SOG %2.2f ") + getUsrSpeedUnit() + _T("  "),
-                      toUsrSpeed(gSog));
+    wxString sogcog;
+    if (!std::isnan(gSog))
+      sogcog.Printf(_T("SOG %2.2f ") + getUsrSpeedUnit() + _T("  "),
+                  toUsrSpeed(gSog));
+    else
+      sogcog.Printf(_T("SOG --- ")) ;
 
-      wxString cogs;
-      if (std::isnan(gCog))
-        cogs.Printf(wxString("COG ---\u00B0", wxConvUTF8));
-      else {
-        if (g_bShowTrue)
-          cogs << wxString::Format(wxString("COG %03d°  ", wxConvUTF8),
-                                   (int)gCog);
-        if (g_bShowMag)
-          cogs << wxString::Format(wxString("COG %03d°(M)  ", wxConvUTF8),
-                                   (int)gFrame->GetMag(gCog));
+    wxString cogs;
+      // We show COG only if SOG is > 0
+    if (!std::isnan(gCog) && !std::isnan(gSog) && (gSog > 0)){
+      if (g_bShowTrue)
+        cogs << wxString::Format(wxString("COG %03d%c  "), (int)gCog, 0x00B0);
+      if (g_bShowMag)
+        cogs << wxString::Format(wxString("COG %03d%c(M)  "),
+                               (int)GetMag(gCog), 0x00B0);
       }
+    else
+      cogs.Printf(("COG ---%c"), 0x00B0);
 
-      sogcog.Append(cogs);
-      SetStatusText(sogcog, STAT_FIELD_SOGCOG);
-    }
+
+    sogcog.Append(cogs);
+    SetStatusText(sogcog, STAT_FIELD_SOGCOG);
   }
 
 #ifdef ocpnUPDATE_SYSTEM_TIME
@@ -10555,24 +10563,25 @@ double AnchorDistFix(double const d, double const AnchorPointMinDist,
       return d;
 
   else
-      // if ( d < 0.0 )
-      if (d > -AnchorPointMinDist)
-    return -AnchorPointMinDist;
-  else if (d < -AnchorPointMaxDist)
-    return -AnchorPointMaxDist;
-  else
-    return d;
+    // if ( d < 0.0 )
+    if (d > -AnchorPointMinDist)
+      return -AnchorPointMinDist;
+    else if (d < -AnchorPointMaxDist)
+      return -AnchorPointMaxDist;
+    else
+      return d;
 }
 
 //      Auto timed popup Window implementation
 
 BEGIN_EVENT_TABLE(TimedPopupWin, wxWindow)
-EVT_PAINT(TimedPopupWin::OnPaint) EVT_TIMER(POPUP_TIMER, TimedPopupWin::OnTimer)
+EVT_PAINT(TimedPopupWin::OnPaint)
+EVT_TIMER(POPUP_TIMER, TimedPopupWin::OnTimer)
 
-    END_EVENT_TABLE()
+END_EVENT_TABLE()
 
-    // Define a constructor
-    TimedPopupWin::TimedPopupWin(wxWindow *parent, int timeout)
+// Define a constructor
+TimedPopupWin::TimedPopupWin(wxWindow *parent, int timeout)
     : wxWindow(parent, wxID_ANY, wxPoint(0, 0), wxSize(1, 1), wxNO_BORDER) {
   m_pbm = NULL;
 

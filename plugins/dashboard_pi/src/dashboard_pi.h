@@ -199,7 +199,7 @@ private:
 
   void ParseSignalK(wxString &msg);
   void handleSKUpdate(wxJSONValue &update);
-  void updateSKItem(wxJSONValue &item, wxString &sfixtime);
+  void updateSKItem(wxJSONValue &item, wxString &talker, wxString &sfixtime);
   wxString m_self;
 
   wxFileConfig *m_pconfig;

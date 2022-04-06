@@ -124,6 +124,7 @@
 
 extern float g_ChartScaleFactorExp;
 extern float g_ShipScaleFactorExp;
+extern double g_mouse_zoom_sensitivity;
 
 #include <vector>
 //#include <wx-3.0/wx/aui/auibar.h>
@@ -4127,9 +4128,9 @@ void ChartCanvas::SetCursorStatus(double cursor_lat, double cursor_lon) {
   wxString s;
   DistanceBearingMercator(cursor_lat, cursor_lon, gLat, gLon, &brg, &dist);
   if (g_bShowMag)
-    s.Printf(wxString("%03d°(M)  ", wxConvUTF8), (int)gFrame->GetMag(brg));
+    s.Printf("%03d%c(M)  ", (int)gFrame->GetMag(brg), 0x00B0);
   else
-    s.Printf(wxString("%03d°  ", wxConvUTF8), (int)brg);
+    s.Printf("%03d%c  ", (int)brg, 0x00B0);
 
   s << FormatDistanceAdaptive(dist);
 
@@ -4322,7 +4323,11 @@ bool ChartCanvas::GetCanvasPointPixVP(ViewPort &vp, double rlat, double rlon,
     return false;
   }
 
-  *r = wxPoint(wxRound(p.m_x), wxRound(p.m_y));
+  if( (abs(p.m_x) < 10e6) && (abs(p.m_y) < 10e6) )
+    *r = wxPoint(wxRound(p.m_x), wxRound(p.m_y));
+  else
+    *r = wxPoint(INVALID_COORD, INVALID_COORD);
+
   return true;
 }
 
@@ -9154,7 +9159,7 @@ bool ChartCanvas::MouseEventProcessCanvas(wxMouseEvent &event) {
     int mouse_wheel_oneshot = abs(wheel_dir) * 4;  // msec
     wheel_dir = wheel_dir > 0 ? 1 : -1;            // normalize
 
-    double factor = 2.0;
+    double factor = g_mouse_zoom_sensitivity;
     if (wheel_dir < 0) factor = 1 / factor;
 
     if (g_bsmoothpanzoom) {

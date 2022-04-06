@@ -452,7 +452,7 @@ static void gui_uninstall(PlugInContainer *pic, const char *plugin) {
 }
 
 static void run_update_dialog(PluginListPanel *parent, PlugInContainer *pic,
-                              bool uninstall, const char *name = 0) {
+                              bool uninstall, const char *name = 0, bool b_forceEnable = false) {
   wxString pluginName = pic->m_common_name;
   const char *plugin = name == 0 ? pic->m_common_name.mb_str().data() : name;
   auto updates = getUpdates(plugin);
@@ -522,6 +522,7 @@ static void run_update_dialog(PluginListPanel *parent, PlugInContainer *pic,
 
   std::string manifestPath = PluginHandler::fileListPath(update.name);
   wxTextFile manifest_file(manifestPath);
+  wxString pluginFile;
   if (manifest_file.Open()) {
     wxString val;
     for (wxString str = manifest_file.GetFirstLine(); !manifest_file.Eof();
@@ -540,9 +541,20 @@ static void run_update_dialog(PluginListPanel *parent, PlugInContainer *pic,
 
           PluginHandler::cleanupFiles(manifestPath, update.name);
         }
+        else {
+          pluginFile = str;
+        }
         break;
       }
     }
+  }
+
+  if (b_forceEnable && pluginFile.Length()){
+    wxString config_section = (_T ( "/PlugIns/" ));
+    wxFileName fn(pluginFile);
+    config_section += fn.GetFullName();
+    pConfig->SetPath(config_section);
+    pConfig->Write(_T ( "bEnabled" ), true);
   }
 
   //  Reload all plugins, which will bring in the action results.
@@ -1262,6 +1274,12 @@ bool PlugInManager::LoadPlugInDirectory(const wxString &plugin_dir,
               if (!pic->m_bToolboxPanel) NotifySetupOptionsPlugin(pic);
             }
           }
+
+          if (g_options && g_boptionsactive){
+            if (pic->m_cap_flag & INSTALLS_TOOLBAR_TOOL)
+              g_options->SetForceNewToolbarOnCancel( true );
+          }
+
         }
         wxLog::FlushActive();
 
@@ -1515,6 +1533,12 @@ bool PlugInManager::UpdatePlugIns() {
       pic->m_version_major = pic->m_pplugin->GetPlugInVersionMajor();
       pic->m_version_minor = pic->m_pplugin->GetPlugInVersionMinor();
       pic->m_bitmap = pic->m_pplugin->GetPlugInBitmap();
+
+      if(g_options && g_boptionsactive){
+        if (pic->m_cap_flag & INSTALLS_TOOLBAR_TOOL)
+          g_options->SetForceNewToolbarOnCancel( true );
+      }
+
       bret = true;
     } else if (!pic->m_bEnabled && pic->m_bInitState) {
 
@@ -1532,6 +1556,17 @@ bool PlugInManager::UpdatePlugIns() {
   }
 
   UpDateChartDataTypes();
+
+    // Tell all the PlugIns about the current OCPN configuration
+  SendBaseConfigToAllPlugIns();
+  SendS52ConfigToAllPlugIns(true);
+  SendSKConfigToAllPlugIns();
+
+  // Inform Plugins of OpenGL configuration, if enabled
+  if (g_bopengl) {
+    if (gFrame->GetPrimaryCanvas()->GetglCanvas())
+      gFrame->GetPrimaryCanvas()->GetglCanvas()->SendJSONConfigMessage();
+  }
 
   return bret;
 }
@@ -1750,6 +1785,10 @@ bool PlugInManager::DeactivatePlugIn(PlugInContainer *pic) {
           (pic->m_cap_flag & INSTALLS_PLUGIN_CHART_GL)) {
         ChartData->PurgeCachePlugins();
         gFrame->InvalidateAllQuilts();
+      }
+      if(g_pOptions && g_boptionsactive){
+        if (pic->m_cap_flag & INSTALLS_TOOLBAR_TOOL)
+          g_pOptions->SetForceNewToolbarOnCancel( true );
       }
 
       pic->m_bInitState = false;
@@ -2264,11 +2303,13 @@ bool PlugInManager::CheckBlacklistedPlugin(opencpn_plugin *plugin) {
       }
 
       wxLogMessage(msg1);
-      if (m_benable_blackdialog)
-        OCPNMessageBox(NULL, msg, wxString(_("OpenCPN Info")),
+      if (!PluginBlacklist[i].mute_dialog) {
+        if (m_benable_blackdialog)
+          OCPNMessageBox(NULL, msg, wxString(_("OpenCPN Info")),
                        wxICON_INFORMATION | wxOK, 10);  // 10 second timeout
-      else
-        m_deferred_blacklist_messages.Add(msg);
+        else
+          m_deferred_blacklist_messages.Add(msg);
+      }
 
       return PluginBlacklist[i].hard;
     }
@@ -2278,10 +2319,12 @@ bool PlugInManager::CheckBlacklistedPlugin(opencpn_plugin *plugin) {
 
 PlugInContainer *PlugInManager::LoadPlugIn(wxString plugin_file) {
   PlugInContainer *pic = new PlugInContainer;
-  if (!LoadPlugIn(plugin_file, pic))
+  if (!LoadPlugIn(plugin_file, pic)) {
+    delete pic;
     return NULL;
-  else
+  } else {
     return pic;
+  }
 }
 
 PlugInContainer *PlugInManager::LoadPlugIn(wxString plugin_file,
@@ -4980,6 +5023,8 @@ CatalogMgrPanel::CatalogMgrPanel(wxWindow *parent)
     m_updateButton->Bind(wxEVT_COMMAND_BUTTON_CLICKED,
                          &CatalogMgrPanel::OnUpdateButton, this);
     SetUpdateButtonLabel();
+    m_tarballButton = NULL;
+    m_adv_button = NULL;
   } else {
     // First line
     m_catalogText = new wxStaticText(this, wxID_STATIC, _T(""));
@@ -5022,7 +5067,8 @@ CatalogMgrPanel::CatalogMgrPanel(wxWindow *parent)
 CatalogMgrPanel::~CatalogMgrPanel() {
   m_updateButton->Unbind(wxEVT_COMMAND_BUTTON_CLICKED,
                          &CatalogMgrPanel::OnUpdateButton, this);
-  m_tarballButton->Unbind(wxEVT_COMMAND_BUTTON_CLICKED,
+  if (m_tarballButton)
+    m_tarballButton->Unbind(wxEVT_COMMAND_BUTTON_CLICKED,
                           &CatalogMgrPanel::OnTarballButton, this);
 }
 
@@ -5102,7 +5148,9 @@ void CatalogMgrPanel::OnUpdateButton(wxCommandEvent &event) {
   g_pi_manager->LoadAllPlugIns(false);
 
   // Update this Panel, and the entire list.
+#ifndef __OCPN__ANDROID__
   m_catalogText->SetLabel(GetCatalogText(true));
+#endif
   if (m_PluginListPanel)
     m_PluginListPanel->ReloadPluginPanels(g_pi_manager->GetPlugInArray());
 
@@ -6047,7 +6095,9 @@ void PluginPanel::DoPluginSelect() {
     // auto dialog = dynamic_cast<PluginListPanel*>(GetParent());
     // auto dialog = dynamic_cast<PluginListPanel*>(m_parent);
     // wxASSERT(dialog != 0);
-    run_update_dialog(m_PluginListPanel, m_pPlugin, false);
+
+    // Install the new plugin, auto-enabling as a convenience measure.
+    run_update_dialog(m_PluginListPanel, m_pPlugin, false, 0, true);
   } else if (m_bSelected) {
     SetSelected(false);
     m_PluginListPanel->SelectPlugin(NULL);

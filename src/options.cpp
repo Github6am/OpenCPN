@@ -289,6 +289,9 @@ extern wxString g_compatOS;
 extern wxLocale* plocale_def_lang;
 #endif
 
+extern double g_mouse_zoom_sensitivity;
+extern int g_mouse_zoom_sensitivity_ui;
+
 extern OcpnSound* g_anchorwatch_sound;
 extern wxString g_anchorwatch_sound_file;
 extern wxString g_DSC_sound_file;
@@ -359,6 +362,11 @@ bool g_bOverruleScaMin;
 extern int osMajor, osMinor;
 extern bool g_bShowMuiZoomButtons;
 extern MyConfig *pConfig;
+
+#ifdef __OCPN__ANDROID__
+extern int g_Android_SDK_Version;
+extern MigrateAssistantDialog *g_migrateDialog;
+#endif
 
 extern wxString GetShipNameFromFile(int);
 
@@ -575,7 +583,7 @@ public:
     void DoChartSelected(  );
     void SetSelected( bool selected );
     void OnPaint( wxPaintEvent &event );
-    void OnEraseBackground( wxEraseEvent &event );
+    //void OnEraseBackground( wxEraseEvent &event );
     void OnSize(wxSizeEvent &event);
     ChartDirInfo GetCDI() { return m_cdi; }
     int GetUnselectedHeight(){ return m_unselectedHeight; }
@@ -599,7 +607,7 @@ private:
 
 BEGIN_EVENT_TABLE(OCPNChartDirPanel, wxPanel)
 EVT_PAINT ( OCPNChartDirPanel::OnPaint )
-EVT_ERASE_BACKGROUND( OCPNChartDirPanel::OnEraseBackground)
+//EVT_ERASE_BACKGROUND( OCPNChartDirPanel::OnEraseBackground)
 EVT_SIZE( OCPNChartDirPanel::OnSize)
 END_EVENT_TABLE()
 
@@ -619,9 +627,9 @@ OCPNChartDirPanel::OCPNChartDirPanel(wxWindow *parent, wxWindowID id, const wxPo
 
     m_unselectedHeight = 2 * m_refHeight;
 
-#ifdef __OCPN__ANDROID__
-    m_unselectedHeight = 4 * m_refHeight;
-#endif
+// #ifdef __OCPN__ANDROID__
+//     m_unselectedHeight = 2 * m_refHeight;
+// #endif
 
     SetMinSize(wxSize(-1, m_unselectedHeight));
 
@@ -704,9 +712,9 @@ void OCPNChartDirPanel::SetSelected( bool selected )
 
 
 
-void OCPNChartDirPanel::OnEraseBackground( wxEraseEvent &event )
-{
-}
+// void OCPNChartDirPanel::OnEraseBackground( wxEraseEvent &event )
+// {
+// }
 
 void OCPNChartDirPanel::OnSize(wxSizeEvent &event)
 {
@@ -1569,11 +1577,13 @@ void OCPNFatCombo::Clear(void) {
 }
 
 BEGIN_EVENT_TABLE(options, wxDialog)
+EVT_INIT_DIALOG(options::OnDialogInit)
 EVT_CHECKBOX(ID_DEBUGCHECKBOX1, options::OnDebugcheckbox1Click)
 EVT_BUTTON(ID_BUTTONADD, options::OnButtonaddClick)
 EVT_BUTTON(ID_BUTTONDELETE, options::OnButtondeleteClick)
 EVT_BUTTON(ID_PARSEENCBUTTON, options::OnButtonParseENC)
 EVT_BUTTON(ID_BUTTONCOMPRESS, options::OnButtoncompressClick)
+EVT_BUTTON(ID_BUTTONMIGRATE, options::OnButtonmigrateClick)
 EVT_BUTTON(ID_TCDATAADD, options::OnInsertTideDataLocation)
 EVT_BUTTON(ID_TCDATADEL, options::OnRemoveTideDataLocation)
 EVT_BUTTON(ID_APPLY, options::OnApplyClick)
@@ -1779,6 +1789,8 @@ void options::Init(void) {
   lastPage = 0;
   m_bneedNew = false;
 
+  m_bForceNewToolbaronCancel = false;
+
   m_cs = (ColorScheme)0;
 
   // for deferred loading
@@ -1862,6 +1874,10 @@ For more info, see the file LINUX_DEVICES.md in the distribution docs.
 )");
 
 #endif  // defined(__GNUC__) && __GNUC__ < 8
+
+void options::OnDialogInit(wxInitDialogEvent& event)
+{
+}
 
 void options::CheckDeviceAccess(/*[[maybe_unused]]*/ wxString& path) {}
 
@@ -3915,13 +3931,12 @@ void options::CreatePanel_Routes(size_t parent, int border_size,
 
 void options::CreatePanel_ChartsLoad(size_t parent, int border_size,
                                      int group_item_spacing) {
-  wxScrolledWindow* chartPanelWin = AddPage(m_pageCharts, _("Chart Files"));
+  chartPanelWin = AddPage(m_pageCharts, _("Chart Files"));
 
   chartPanel = new wxBoxSizer(wxVERTICAL);
   chartPanelWin->SetSizer(chartPanel);
 
-  wxStaticBox* loadedBox =
-      new wxStaticBox(chartPanelWin, wxID_ANY, _("Directories"));
+  loadedBox = new wxStaticBox(chartPanelWin, wxID_ANY, _("Directories"));
   activeSizer = new wxStaticBoxSizer(loadedBox, wxHORIZONTAL);
   chartPanel->Add(activeSizer, 1, wxALL | wxEXPAND, border_size);
 
@@ -3940,13 +3955,7 @@ void options::CreatePanel_ChartsLoad(size_t parent, int border_size,
   boxSizerCharts = new wxBoxSizer(wxVERTICAL);
   m_scrollWinChartList->SetSizer(boxSizerCharts);
 
-      // Currently loaded chart dirs
-  ActiveChartArray.Clear();
-  for (size_t i = 0; i < m_CurrentDirList.GetCount(); i++) {
-    ActiveChartArray.Add(m_CurrentDirList[i]);
-  }
-
-  wxBoxSizer* cmdButtonSizer = new wxBoxSizer(wxVERTICAL);
+  cmdButtonSizer = new wxBoxSizer(wxVERTICAL);
   activeSizer->Add(cmdButtonSizer, 0, wxALL, border_size);
 
   wxString b1 = _("Add Directory...");
@@ -3981,6 +3990,16 @@ void options::CreatePanel_ChartsLoad(size_t parent, int border_size,
   m_compressBtn = NULL;
 #endif
 
+#ifdef __OCPN__ANDROID__
+  if (g_Android_SDK_Version >= 30) {
+    m_migrateBtn =
+      new wxButton(chartPanelWin, ID_BUTTONMIGRATE, _("Migrate Charts.."));
+    cmdButtonSizer->Add(m_migrateBtn, 1, wxALL | wxEXPAND, group_item_spacing);
+  }
+#endif
+
+  cmdButtonSizer->AddSpacer( GetCharHeight());
+
   wxStaticBox* itemStaticBoxUpdateStatic =
       new wxStaticBox(chartPanelWin, wxID_ANY, _("Update Control"));
   wxStaticBoxSizer* itemStaticBoxSizerUpdate =
@@ -4004,15 +4023,23 @@ void options::CreatePanel_ChartsLoad(size_t parent, int border_size,
 
   itemStaticBoxSizerUpdate->Add(itemFlexGridSizerUpdate, 1, wxEXPAND, 5);
 
+  // Currently loaded chart dirs
+  ActiveChartArray.Clear();
+  for (size_t i = 0; i < m_CurrentDirList.GetCount(); i++) {
+    ActiveChartArray.Add(m_CurrentDirList[i]);
+  }
+
   UpdateChartDirList();
 
   chartPanel->Layout();
 }
 
+
 void options::UpdateChartDirList( )
 {
     // Clear the sizer, and delete all the child panels
     m_scrollWinChartList->GetSizer()->Clear( true );
+    m_scrollWinChartList->ClearBackground();
 
     panelVector.clear();
 
@@ -4029,6 +4056,9 @@ void options::UpdateChartDirList( )
     }
 
     m_scrollWinChartList->GetSizer()->Layout();
+
+    chartPanelWin->ClearBackground();
+    chartPanelWin->Layout();
 
     // There are some problems with wxScrolledWindow after add/removing items.
     // Typically, the problem is that blank space remains at the top of the
@@ -5170,7 +5200,7 @@ void options::CreatePanel_TidesCurrents(size_t parent, int border_size,
   // Add first column
   wxListItem col0;
   col0.SetId(0);
-  col0.SetText(_(""));
+  col0.SetText(_T(""));
   col0.SetWidth(500);
   col0.SetAlign(wxLIST_FORMAT_LEFT);
 
@@ -5713,6 +5743,8 @@ void options::CreatePanel_Display(size_t parent, int border_size,
 #endif
   }
 }
+
+
 
 void options::CreatePanel_Units(size_t parent, int border_size,
                                 int group_item_spacing) {
@@ -6644,6 +6676,20 @@ void options::CreatePanel_AIS(size_t parent, int border_size,
   panelAIS->Layout();
 }
 
+class MouseZoomSlider : public wxSlider {
+    public:
+        MouseZoomSlider(wxWindow* parent, wxSize size) :
+            wxSlider(parent, wxID_ANY, 10, 1, 100, wxDefaultPosition,
+                     size, SLIDER_STYLE)
+        {
+            Show();
+#ifdef __OCPN__ANDROID__
+            GetHandle()->setStyleSheet(getQtStyleSheet());
+#endif
+        }
+};
+
+
 void options::CreatePanel_UI(size_t parent, int border_size,
                              int group_item_spacing) {
   wxScrolledWindow* itemPanelFont = AddPage(parent, _("General Options"));
@@ -6806,23 +6852,38 @@ void options::CreatePanel_UI(size_t parent, int border_size,
   }
 #endif
 
-  OcpnSound* sound = SoundFactory();
+  auto sound = std::unique_ptr<OcpnSound>(SoundFactory());
   int deviceCount = sound->DeviceCount();
   wxLogMessage("options: got device count: %d", deviceCount);
   if (deviceCount >= 1) {
     wxArrayString labels;
     for (int i = 0; i < deviceCount; i += 1) {
-      if (!sound->IsOutputDevice(i)) {
-        continue;
-      }
       wxString label(sound->GetDeviceInfo(i));
       if (label == "") {
         std::ostringstream stm;
         stm << i;
         label = _("Unknown device :") + stm.str();
-        labels.Add(label);
       }
+     if (!sound->IsOutputDevice(i)) {
+        std::ostringstream stm;
+        stm << i;
+        label = _("Input device :") + stm.str();
+      }
+      labels.Add(label);
     }
+
+
+    //  if sound device index is uninitialized, set to "default", if found.
+    // Otherwise, set to 0
+    int iDefault = labels.Index( "default");
+
+    if (g_iSoundDeviceIndex == -1){
+      if (iDefault >= 0)
+        g_iSoundDeviceIndex = iDefault;
+      else
+        g_iSoundDeviceIndex = 0;
+    }
+
     pSoundDeviceIndex = new wxChoice();
     if (pSoundDeviceIndex) {
       pSoundDeviceIndex->Create(itemPanelFont, wxID_ANY, wxDefaultPosition,
@@ -6937,6 +6998,13 @@ void options::CreatePanel_UI(size_t parent, int border_size,
 #ifdef __OCPN__ANDROID__
   m_pSlider_Text_Factor->GetHandle()->setStyleSheet(getQtStyleSheet());
 #endif
+
+  sliderSizer->Add(new wxStaticText(itemPanelFont,
+                                    wxID_ANY,
+                                    "Mouse wheel zoom sensitivity"),
+                   inputFlags);
+  m_pMouse_Zoom_Slider = new MouseZoomSlider(itemPanelFont, m_sliderSize);
+  sliderSizer->Add(m_pMouse_Zoom_Slider, 0, wxALL, border_size);
 
   miscOptions->Add(sliderSizer, 0, wxEXPAND, 5);
   miscOptions->AddSpacer(20);
@@ -7393,9 +7461,6 @@ void options::SetInitialSettings(void) {
     ActiveChartArray.Add(m_CurrentDirList[i]);
   }
 
-  UpdateChartDirList();
-
-#if 1
   // ChartGroups
   if (m_pWorkDirList) {
     UpdateWorkArrayFromDisplayPanel();
@@ -7408,7 +7473,6 @@ void options::SetInitialSettings(void) {
     groupsPanel->SetGroupArray(m_pGroupArray);
     groupsPanel->SetInitialSettings();
   }
-#endif
 
   if (m_pConfig) {
     pShowStatusBar->SetValue(g_bShowStatusBar);
@@ -7705,6 +7769,7 @@ void options::SetInitialSettings(void) {
   m_pSlider_Chart_Factor->SetValue(g_ChartScaleFactor);
   m_pSlider_Ship_Factor->SetValue(g_ShipScaleFactor);
   m_pSlider_Text_Factor->SetValue(g_ENCSoundingScaleFactor);
+  m_pMouse_Zoom_Slider->SetValue(g_mouse_zoom_sensitivity_ui);
   wxString screenmm;
 
   if (!g_config_display_size_manual) {
@@ -7759,6 +7824,8 @@ void options::SetInitialSettings(void) {
   connectionsaved = true;
 
   SetSelectedConnectionPanel(nullptr);
+
+  m_bForceNewToolbaronCancel = false;
 }
 
 void options::resetMarStdList(bool bsetConfig, bool bsetStd) {
@@ -8853,6 +8920,11 @@ void options::OnApplyClick(wxCommandEvent& event) {
   g_ShipScaleFactor = m_pSlider_Ship_Factor->GetValue();
   g_ShipScaleFactorExp = g_Platform->getChartScaleFactorExp(g_ShipScaleFactor);
   g_ENCSoundingScaleFactor = m_pSlider_Text_Factor->GetValue();
+  g_mouse_zoom_sensitivity_ui = m_pMouse_Zoom_Slider->GetValue();
+  g_mouse_zoom_sensitivity =
+    MouseZoom::ui_to_config(g_mouse_zoom_sensitivity_ui);
+
+
 
   //  Only reload the icons if user has actually visted the UI page
   // if(m_bVisitLang)
@@ -9356,6 +9428,20 @@ static bool CompressChart(wxString in, wxString out) {
   return false;
 }
 
+void options::OnButtonmigrateClick(wxCommandEvent& event)
+{
+#ifdef __OCPN__ANDROID__
+
+  // Run the chart migration assistant
+  g_migrateDialog = new MigrateAssistantDialog(gFrame, true);   // skip Folder scan
+  g_migrateDialog->SetSize( gFrame->GetSize());
+  g_migrateDialog->Centre();
+  g_migrateDialog->Raise();
+  g_migrateDialog->ShowModal();
+#endif
+
+}
+
 void options::OnButtoncompressClick(wxCommandEvent& event) {
 #if 0
   wxArrayInt pListBoxSelections;
@@ -9502,7 +9588,10 @@ void options::OnCancelClick(wxCommandEvent& event) {
   pConfig->Write("OptionsSizeX", lastWindowSize.x);
   pConfig->Write("OptionsSizeY", lastWindowSize.y);
 
-  EndModal(0);
+  int rv = 0;
+  if (m_bForceNewToolbaronCancel)
+    rv = TOOLBAR_CHANGED;
+  EndModal(rv);
 }
 
 void options::OnClose(wxCloseEvent& event) {
@@ -9661,6 +9750,8 @@ void options::OnChooseFontColor(wxCommandEvent& event) {
 void options::OnChartsPageChange(wxListbookEvent& event) {
   unsigned int i = event.GetSelection();
 
+  UpdateChartDirList();
+
   //    User selected Chart Groups Page?
   //    If so, build the remaining UI elements
   if (2 == i) {  // 2 is the index of "Chart Groups" page
@@ -9731,6 +9822,7 @@ void options::DoOnPageChange(size_t page) {
   //    If so, build the "Charts" page variants
   if (1 == i) {  // 2 is the index of "Charts" page
     k_charts = VISIT_CHARTS;
+    UpdateChartDirList();
   }
 
   else if (m_pageUI == i) {  // 5 is the index of "User Interface" page
