@@ -553,7 +553,7 @@ MUIBar::MUIBar(ChartCanvas* parent, int orientation, float size_factor,
   // wxWindow::Create(parent, id, pos, size, style, name);
   // long mstyle = wxSIMPLE_BORDER;
   long mstyle = wxNO_BORDER | wxFRAME_NO_TASKBAR | wxFRAME_SHAPED |
-                wxFRAME_FLOAT_ON_PARENT;
+                wxFRAME_FLOAT_ON_PARENT | wxFRAME_TOOL_WINDOW;
 
   m_scaleFactor = size_factor;
   m_cs = (ColorScheme)-1;
@@ -632,13 +632,13 @@ void MUIBar::OnScaleSelected(wxMouseEvent& event) {
       dScale = wxMax(dScale, 1000);
       double displayScaleNow = pcc->GetScaleValue();
       double factor = displayScaleNow / dScale;
-      pcc->DoZoomCanvas(factor);
+      pcc->DoZoomCanvas(factor, false);
 
       // Run the calculation again, to reduce roundoff error in large scale
       // jumps.
       displayScaleNow = pcc->GetScaleValue();
       factor = displayScaleNow / dScale;
-      pcc->DoZoomCanvas(factor);
+      pcc->DoZoomCanvas(factor, false);
     }
   }
 }
